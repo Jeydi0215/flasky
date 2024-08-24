@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 # Initialize the hand detector and classifier
 detector = HandDetector(maxHands=1)
-classifier = Classifier("./venv/Model/keras_model.h5", "./venv/Model/labels.txt")
+classifier = Classifier("/Model/keras_model.h5", "/Model/labels.txt")
 
 # Configuration
 offset = 20
