@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import cv2 
 from cvzone.HandTrackingModule import HandDetector
@@ -14,16 +14,12 @@ warnings.filterwarnings("ignore", category=UserWarning, message="No training con
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
-# Initialize video capture
-cap = cv2.VideoCapture(0)
-
 # Initialize hand detector and classifier
 detector = HandDetector(maxHands=1)
 classifier = Classifier(
     "venv/Model/keras_model.h5", 
     "venv/Model/labels.txt"
 )
-
 
 offset = 20
 imgSize = 300
@@ -54,7 +50,6 @@ def translate_image(img):
             wGap = math.ceil((imgSize - wCal) / 2)
             imgWhite[:, wGap:wCal + wGap] = imgResize
             prediction, index = classifier.getPrediction(imgWhite, draw=False)
-            print(prediction, index)
         else:
             k = imgSize / w
             hCal = math.ceil(k * h)
@@ -73,14 +68,22 @@ def translate_image(img):
 
     return translation
 
-@app.route('/translate', methods=['GET'])
+@app.route('/translate', methods=['POST'])
 def translate_asl():
-    success, img = cap.read()
-    if not success:
-        return jsonify({'img': '', 'translation': ''})
+    if 'image' not in request.files:
+        return jsonify({'img': '', 'translation': 'No image uploaded'})
 
+    # Get the image from the request
+    file = request.files['image']
+    img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
+
+    if img is None:
+        return jsonify({'img': '', 'translation': 'Invalid image'})
+
+    # Translate the image
     translation = translate_image(img)
 
+    # Encode the image back to base64
     _, buffer = cv2.imencode('.jpg', img)
     img_str = base64.b64encode(buffer).decode('utf-8')
 
