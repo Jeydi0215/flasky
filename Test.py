@@ -20,9 +20,10 @@ cap = cv2.VideoCapture(0)
 # Initialize hand detector and classifier
 detector = HandDetector(maxHands=1)
 classifier = Classifier(
-    r"C:\Users\PC\OneDrive\Desktop\Thesis\flask-server\venv\Model\keras_model.h5", 
-    r"C:\Users\PC\OneDrive\Desktop\Thesis\flask-server\venv\Model\labels.txt"
+    "venv/Model/keras_model.h5", 
+    "venv/Model/labels.txt"
 )
+
 
 offset = 20
 imgSize = 300
