@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: flask-server
+    env: python
+    buildCommand: |
+      apt-get update
+      apt-get install -y build-essential
+      pip install --upgrade pip setuptools
+      pip install -r requirements.txt
+    startCommand: python Test.py
