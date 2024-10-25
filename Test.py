@@ -75,9 +75,12 @@ def translate_image(img):
 
     return translation
 
+@app.route('/')
+def index():
+    return "Welcome to the ASL Translation Service! Use the /translate endpoint to send images."
+
 @app.route('/translate', methods=['POST'])
 def translate_asl():
-    # Get the image from the request
     data = request.get_json()
     if 'image' not in data:
         return jsonify({'translation': 'No image data received'})
