@@ -26,6 +26,8 @@ labels_path = os.path.join(base_dir, 'Model', 'labels.txt')      # Adjust this i
 # Check if the model file exists
 if not os.path.exists(model_path):
     raise FileNotFoundError(f"The model file was not found at the specified path: {model_path}")
+else:
+    print(f"Model file found at: {model_path}")  # Print the path for verification
 
 # Initialize hand detector and classifier
 detector = HandDetector(maxHands=1)
