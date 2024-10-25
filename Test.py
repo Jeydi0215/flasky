@@ -86,14 +86,14 @@ def translate_asl():
     """Endpoint for translating ASL images."""
     data = request.get_json()
     if 'image' not in data:
-        return jsonify({'translation': 'No image data received'})
+        return jsonify({'translation': 'No image data received'}), 400
 
     # Decode the base64 image
     img_data = base64.b64decode(data['image'])
     img = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
 
     if img is None:
-        return jsonify({'translation': 'Invalid image'})
+        return jsonify({'translation': 'Invalid image'}), 400
 
     # Translate the image
     translation = translate_image(img)
