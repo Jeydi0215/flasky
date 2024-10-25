@@ -123,7 +123,6 @@ pymaze==1.2.3
 PyMsgBox==1.0.9
 pyparsing==3.1.2
 pyperclip==1.9.0
-pypiwin32==223
 PyQt5==5.15.10
 PyQt5-Qt5==5.15.2
 PyQt5-sip==12.13.0
