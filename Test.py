@@ -23,21 +23,13 @@ print("Base directory:", base_dir)  # Print base directory for debugging
 model_path = os.path.join(base_dir, 'Model', 'keras_model.h5')  # Adjust this if necessary
 labels_path = os.path.join(base_dir, 'Model', 'labels.txt')      # Adjust this if necessary
 
-# Debugging: Print the paths to ensure they are correct
-print("Model path:", model_path)
-print("Labels path:", labels_path)
-
 # Check if the model file exists
 if not os.path.exists(model_path):
     raise FileNotFoundError(f"The model file was not found at the specified path: {model_path}")
 
 # Initialize hand detector and classifier
-try:
-    detector = HandDetector(maxHands=1)
-    classifier = Classifier(model_path, labels_path)
-except Exception as e:
-    print(f"Error initializing models: {e}")  # Log initialization error
-    raise
+detector = HandDetector(maxHands=1)
+classifier = Classifier(model_path, labels_path)
 
 offset = 20
 imgSize = 300
@@ -85,26 +77,23 @@ def translate_image(img):
 
 @app.route('/translate', methods=['POST'])
 def translate_asl():
-    if 'image' not in request.files:
-        return jsonify({'img': '', 'translation': 'No image uploaded'})
-
     # Get the image from the request
-    file = request.files['image']
-    img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
+    data = request.get_json()
+    if 'image' not in data:
+        return jsonify({'translation': 'No image data received'})
+
+    # Decode the base64 image
+    img_data = base64.b64decode(data['image'])
+    img = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
 
     if img is None:
-        return jsonify({'img': '', 'translation': 'Invalid image'})
+        return jsonify({'translation': 'Invalid image'})
 
     # Translate the image
     translation = translate_image(img)
 
-    # Encode the image back to base64
-    _, buffer = cv2.imencode('.jpg', img)
-    img_str = base64.b64encode(buffer).decode('utf-8')
-
-    return jsonify({'img': img_str, 'translation': translation})
+    return jsonify({'translation': translation})
 
 if __name__ == '__main__':
-    # Use the PORT environment variable if it exists, otherwise default to 10000
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=True)
