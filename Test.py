@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import cv2
 from cvzone.HandTrackingModule import HandDetector
-from cvzone.ClassificationModule import Classifier
+from tensorflow.keras.models import load_model
 import numpy as np
 import math
 import base64
@@ -26,12 +26,15 @@ labels_path = os.path.join(base_dir, 'Model', 'labels.txt')      # Adjust this i
 # Check if the model file exists
 if not os.path.exists(model_path):
     raise FileNotFoundError(f"The model file was not found at the specified path: {model_path}")
-else:
-    print(f"Model file found at: {model_path}")  # Print the path for verification
 
-# Initialize hand detector and classifier
+# Load and compile the model
+classifier = load_model(model_path)
+classifier.compile(optimizer='adam',  # Use the same optimizer as during training
+                   loss='categorical_crossentropy',  # Use the same loss function
+                   metrics=['accuracy'])  # Add any metrics you want to track
+
+# Initialize hand detector
 detector = HandDetector(maxHands=1)
-classifier = Classifier(model_path, labels_path)
 
 offset = 20
 imgSize = 300
