@@ -27,11 +27,8 @@ labels_path = os.path.join(base_dir, 'Model', 'labels.txt')      # Adjust this i
 if not os.path.exists(model_path):
     raise FileNotFoundError(f"The model file was not found at the specified path: {model_path}")
 
-# Load and compile the model
-classifier = load_model(model_path)
-classifier.compile(optimizer='adam',  # Use the same optimizer as during training
-                   loss='categorical_crossentropy',  # Use the same loss function
-                   metrics=['accuracy'])  # Add any metrics you want to track
+# Load the model without compiling
+classifier = load_model(model_path, compile=False)
 
 # Initialize hand detector
 detector = HandDetector(maxHands=1)
