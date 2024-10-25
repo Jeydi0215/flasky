@@ -40,6 +40,7 @@ labels = [
 ]
 
 def translate_image(img):
+    """Processes the input image and predicts the corresponding ASL letter."""
     hands, img = detector.findHands(img)
     if hands:
         hand = hands[0]
@@ -77,10 +78,12 @@ def translate_image(img):
 
 @app.route('/')
 def index():
+    """Welcome route."""
     return "Welcome to the ASL Translation Service! Use the /translate endpoint to send images."
 
 @app.route('/translate', methods=['POST'])
 def translate_asl():
+    """Endpoint for translating ASL images."""
     data = request.get_json()
     if 'image' not in data:
         return jsonify({'translation': 'No image data received'})
@@ -98,5 +101,6 @@ def translate_asl():
     return jsonify({'translation': translation})
 
 if __name__ == '__main__':
+    # Ensure the correct port is used on deployment
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=True)
