@@ -20,8 +20,12 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 print("Base directory:", base_dir)  # Print base directory for debugging
 
 # Construct paths to the model and labels file
-model_path = os.path.join(base_dir, 'venv', 'Model', 'keras_model.h5')
-labels_path = os.path.join(base_dir, 'venv', 'Model', 'labels.txt')
+model_path = os.path.join(base_dir, 'Model', 'keras_model.h5')  # Adjust this if necessary
+labels_path = os.path.join(base_dir, 'Model', 'labels.txt')      # Adjust this if necessary
+
+# Debugging: Print the paths to ensure they are correct
+print("Model path:", model_path)
+print("Labels path:", labels_path)
 
 # Check if the model file exists
 if not os.path.exists(model_path):
@@ -101,6 +105,6 @@ def translate_asl():
     return jsonify({'img': img_str, 'translation': translation})
 
 if __name__ == '__main__':
-    # Use the PORT environment variable if it exists, otherwise default to 5000
+    # Use the PORT environment variable if it exists, otherwise default to 10000
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=True)
