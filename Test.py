@@ -9,7 +9,7 @@ import base64
 import os
 import warnings
 
-# Suppress TensorFlow warning
+# Suppress TensorFlow warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
 
 app = Flask(__name__)
@@ -17,14 +17,23 @@ CORS(app)  # Enable CORS for all routes
 
 # Define the base directory
 base_dir = os.path.dirname(os.path.abspath(__file__))
+print("Base directory:", base_dir)  # Print base directory for debugging
 
 # Construct paths to the model and labels file
 model_path = os.path.join(base_dir, 'venv', 'Model', 'keras_model.h5')
 labels_path = os.path.join(base_dir, 'venv', 'Model', 'labels.txt')
 
+# Check if the model file exists
+if not os.path.exists(model_path):
+    raise FileNotFoundError(f"The model file was not found at the specified path: {model_path}")
+
 # Initialize hand detector and classifier
-detector = HandDetector(maxHands=1)
-classifier = Classifier(model_path, labels_path)
+try:
+    detector = HandDetector(maxHands=1)
+    classifier = Classifier(model_path, labels_path)
+except Exception as e:
+    print(f"Error initializing models: {e}")  # Log initialization error
+    raise
 
 offset = 20
 imgSize = 300
