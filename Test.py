@@ -1,11 +1,12 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import cv2 
+import cv2
 from cvzone.HandTrackingModule import HandDetector
 from cvzone.ClassificationModule import Classifier
 import numpy as np
 import math
 import base64
+import os
 import warnings
 
 # Suppress TensorFlow warning
@@ -14,18 +15,22 @@ warnings.filterwarnings("ignore", category=UserWarning, message="No training con
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
+# Define the base directory
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Construct paths to the model and labels file
+model_path = os.path.join(base_dir, 'venv', 'Model', 'keras_model.h5')
+labels_path = os.path.join(base_dir, 'venv', 'Model', 'labels.txt')
+
 # Initialize hand detector and classifier
 detector = HandDetector(maxHands=1)
-classifier = Classifier(
-    "venv/Model/keras_model.h5", 
-    "venv/Model/labels.txt"
-)
+classifier = Classifier(model_path, labels_path)
 
 offset = 20
 imgSize = 300
 labels = [
-    "A", "B", "C", "D", "E", "F", "G", "H", "I/J", "K", 
-    "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", 
+    "A", "B", "C", "D", "E", "F", "G", "H", "I/J", "K",
+    "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U",
     "V", "W", "X", "Y/Z"
 ]
 
@@ -39,14 +44,12 @@ def translate_image(img):
         imgCrop = img[y - offset:y + h + offset, x - offset:x + w + offset]
 
         imgCropShape = imgCrop.shape
-
         aspectRatio = h / w
 
         if aspectRatio > 1:
             k = imgSize / h
             wCal = math.ceil(k * w)
             imgResize = cv2.resize(imgCrop, (wCal, imgSize))
-            imgResizeShape = imgResize.shape
             wGap = math.ceil((imgSize - wCal) / 2)
             imgWhite[:, wGap:wCal + wGap] = imgResize
             prediction, index = classifier.getPrediction(imgWhite, draw=False)
@@ -57,11 +60,10 @@ def translate_image(img):
                 imgResize = cv2.resize(imgCrop, (imgSize, hCal))
             else:
                 return ''
-            imgResizeShape = imgResize.shape
             hGap = math.ceil((imgSize - hCal) / 2)
             imgWhite[hGap:hCal + hGap, :] = imgResize
             prediction, index = classifier.getPrediction(imgWhite, draw=False)
-        
+
         translation = labels[index]
     else:
         translation = ''
