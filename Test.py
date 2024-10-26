@@ -12,27 +12,30 @@ import warnings
 # Suppress TensorFlow warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
 
+# Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
 
-# Define the base directory
+# Enable CORS to allow requests from your React frontend on Vercel
+CORS(app, resources={r"/*": {"origins": ["https://salinterpret.vercel.app"]}})
+
+# Define base directory to load model and labels
 base_dir = os.path.dirname(os.path.abspath(__file__))
-print("Base directory:", base_dir)  # Print base directory for debugging
 
-# Construct paths to the model and labels file
-model_path = os.path.join(base_dir, 'Model', 'keras_model.h5')  # Adjust this if necessary
-labels_path = os.path.join(base_dir, 'Model', 'labels.txt')      # Adjust this if necessary
+# Paths to model and labels
+model_path = os.path.join(base_dir, 'Model', 'keras_model.h5')
+labels_path = os.path.join(base_dir, 'Model', 'labels.txt')
 
-# Check if the model file exists
+# Check if model file exists
 if not os.path.exists(model_path):
-    raise FileNotFoundError(f"The model file was not found at the specified path: {model_path}")
+    raise FileNotFoundError(f"Model file not found at: {model_path}")
 
-# Load the model without compiling
+# Load the ASL translation model
 classifier = load_model(model_path, compile=False)
 
-# Initialize hand detector
+# Initialize hand detector from cvzone
 detector = HandDetector(maxHands=1)
 
+# Define constants for image processing
 offset = 20
 imgSize = 300
 labels = [
@@ -48,30 +51,28 @@ def translate_image(img):
         hand = hands[0]
         x, y, w, h = hand['bbox']
 
+        # Create a white canvas for resized hand image
         imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
         imgCrop = img[y - offset:y + h + offset, x - offset:x + w + offset]
 
-        imgCropShape = imgCrop.shape
         aspectRatio = h / w
 
+        # Resize and center the cropped image
         if aspectRatio > 1:
             k = imgSize / h
             wCal = math.ceil(k * w)
             imgResize = cv2.resize(imgCrop, (wCal, imgSize))
             wGap = math.ceil((imgSize - wCal) / 2)
             imgWhite[:, wGap:wCal + wGap] = imgResize
-            prediction, index = classifier.getPrediction(imgWhite, draw=False)
         else:
             k = imgSize / w
             hCal = math.ceil(k * h)
-            if imgCrop.size > 0:
-                imgResize = cv2.resize(imgCrop, (imgSize, hCal))
-            else:
-                return ''
+            imgResize = cv2.resize(imgCrop, (imgSize, hCal))
             hGap = math.ceil((imgSize - hCal) / 2)
             imgWhite[hGap:hCal + hGap, :] = imgResize
-            prediction, index = classifier.getPrediction(imgWhite, draw=False)
 
+        # Get prediction from the model
+        prediction, index = classifier.getPrediction(imgWhite, draw=False)
         translation = labels[index]
     else:
         translation = ''
@@ -86,23 +87,27 @@ def index():
 @app.route('/translate', methods=['POST'])
 def translate_asl():
     """Endpoint for translating ASL images."""
-    data = request.get_json()
-    if 'image' not in data:
-        return jsonify({'translation': 'No image data received'}), 400
+    try:
+        data = request.get_json()
+        if 'image' not in data:
+            return jsonify({'error': 'No image data received'}), 400
 
-    # Decode the base64 image
-    img_data = base64.b64decode(data['image'])
-    img = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
+        # Decode the base64 image
+        img_data = base64.b64decode(data['image'])
+        img = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
 
-    if img is None:
-        return jsonify({'translation': 'Invalid image'}), 400
+        if img is None:
+            return jsonify({'error': 'Invalid image'}), 400
 
-    # Translate the image
-    translation = translate_image(img)
+        # Translate the image to ASL
+        translation = translate_image(img)
 
-    return jsonify({'translation': translation})
+        return jsonify({'translation': translation})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # Ensure the correct port is used on deployment
+    # Ensure the port matches what Render assigns
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port, debug=True)
