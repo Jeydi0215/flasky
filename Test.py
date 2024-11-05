@@ -110,4 +110,4 @@ def translate_asl():
 if __name__ == '__main__':
     # Ensure the port matches what Render assigns
     port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)  # Set debug=False for production
