@@ -13,6 +13,8 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
 
 app = Flask(__name__)
+
+# Enable CORS to allow requests from your frontend
 CORS(app, resources={r"/*": {"origins": ["https://salinterpret.vercel.app"]}})
 
 # Paths to model and labels
@@ -64,9 +66,17 @@ def translate_image(img):
         translation = ''
     return translation
 
-@app.route('/translate', methods=['POST'])
+@app.route('/translate', methods=['OPTIONS', 'POST'])
 def translate_asl():
     """Endpoint for translating ASL images."""
+    if request.method == 'OPTIONS':
+        # Preflight CORS response
+        response = jsonify({'status': 'Preflight handled'})
+        response.headers.add("Access-Control-Allow-Origin", "https://salinterpret.vercel.app")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+        response.headers.add("Access-Control-Allow-Methods", "POST")
+        return response
+
     try:
         data = request.get_json()
         if 'image' not in data:
@@ -79,7 +89,9 @@ def translate_asl():
             return jsonify({'error': 'Invalid image'}), 400
 
         translation = translate_image(img)
-        return jsonify({'translation': translation})
+        response = jsonify({'translation': translation})
+        response.headers.add("Access-Control-Allow-Origin", "https://salinterpret.vercel.app")
+        return response
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
