@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 import cv2
 from cvzone.HandTrackingModule import HandDetector
 from tensorflow.keras.models import load_model
@@ -14,8 +14,8 @@ warnings.filterwarnings("ignore", category=UserWarning, message="No training con
 
 app = Flask(__name__)
 
-# Enable CORS to allow requests from your frontend
-CORS(app, resources={r"/*": {"origins": ["https://salinterpret.vercel.app"]}})
+# Enable CORS for specific origin
+CORS(app, resources={r"/*": {"origins": "https://salinterpret.vercel.app"}})
 
 # Paths to model and labels
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -66,15 +66,16 @@ def translate_image(img):
         translation = ''
     return translation
 
-@app.route('/translate', methods=['OPTIONS', 'POST'])
+@app.route('/translate', methods=['POST', 'OPTIONS'])
+@cross_origin(origin='https://salinterpret.vercel.app')  # Ensure CORS for this endpoint
 def translate_asl():
     """Endpoint for translating ASL images."""
     if request.method == 'OPTIONS':
-        # Preflight CORS response
+        # Return a response for the preflight request
         response = jsonify({'status': 'Preflight handled'})
         response.headers.add("Access-Control-Allow-Origin", "https://salinterpret.vercel.app")
         response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-        response.headers.add("Access-Control-Allow-Methods", "POST")
+        response.headers.add("Access-Control-Allow-Methods", "POST,OPTIONS")
         return response
 
     try:
