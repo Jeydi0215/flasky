@@ -1,102 +1,83 @@
-from flask import Flask, jsonify, request
-from flask_cors import CORS, cross_origin
+from flask import Flask, jsonify
+from flask_cors import CORS
 import cv2
 from cvzone.HandTrackingModule import HandDetector
-from tensorflow.keras.models import load_model
+from cvzone.ClassificationModule import Classifier
 import numpy as np
 import math
 import base64
-import os
 import warnings
+import os
 
 # Suppress TensorFlow warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
 
 app = Flask(__name__)
-
-# Enable CORS for specific origin
-CORS(app, resources={r"/*": {"origins": "https://salinterpret.vercel.app"}})
-
-# Paths to model and labels
-base_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(base_dir, 'Model', 'keras_model.h5')
-
-if not os.path.exists(model_path):
-    raise FileNotFoundError(f"Model file not found at: {model_path}")
-
-# Load the model and initialize hand detector
-classifier = load_model(model_path, compile=False)
+CORS(app)  # Enable CORS for all routes
+cap = cv2.VideoCapture(0)
 detector = HandDetector(maxHands=1)
 
-labels = [
-    "A", "B", "C", "D", "E", "F", "G", "H", "I/J", "K",
-    "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U",
-    "V", "W", "X", "Y/Z"
-]
+# Define the path for the model dynamically based on the environment
+# You can either use absolute paths or relative paths based on where your app is running
+model_path = os.environ.get('MODEL_PATH', 'Model/keras_model.h5')  # Default to 'Model/keras_model.h5' if not set
+labels_path = os.environ.get('LABELS_PATH', 'Model/labels.txt')  # Default to 'Model/labels.txt' if not set
+
+# Use environment variables for Heroku or local paths
+classifier = Classifier(model_path, labels_path)
+
+offset = 20
+imgSize = 300
+
+labels = ["A", "B", "C", "D", "E", "F", "G", "H", "I/J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y/Z"]
 
 def translate_image(img):
-    """Processes the input image and predicts the corresponding ASL letter."""
     hands, img = detector.findHands(img)
     if hands:
         hand = hands[0]
         x, y, w, h = hand['bbox']
-        
-        imgSize = 300
+
         imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
-        imgCrop = img[y - 20:y + h + 20, x - 20:x + w + 20]
+        imgCrop = img[y - offset:y + h + offset, x - offset:x + w + offset]
 
         aspectRatio = h / w
+
         if aspectRatio > 1:
             k = imgSize / h
             wCal = math.ceil(k * w)
             imgResize = cv2.resize(imgCrop, (wCal, imgSize))
             wGap = math.ceil((imgSize - wCal) / 2)
             imgWhite[:, wGap:wCal + wGap] = imgResize
+            prediction, index = classifier.getPrediction(imgWhite, draw=False)
+
         else:
             k = imgSize / w
             hCal = math.ceil(k * h)
-            imgResize = cv2.resize(imgCrop, (imgSize, hCal))
+            if imgCrop.size > 0:
+                imgResize = cv2.resize(imgCrop, (imgSize, hCal))
+            else:
+                return ''
             hGap = math.ceil((imgSize - hCal) / 2)
             imgWhite[hGap:hCal + hGap, :] = imgResize
+            prediction, index = classifier.getPrediction(imgWhite, draw=False)
 
-        prediction = classifier.predict(np.expand_dims(imgWhite, axis=0))
-        index = np.argmax(prediction)
         translation = labels[index]
     else:
         translation = ''
+
     return translation
 
-@app.route('/translate', methods=['POST', 'OPTIONS'])
-@cross_origin(origin='https://salinterpret.vercel.app')  # Ensure CORS for this endpoint
+@app.route('/translate', methods=['GET'])
 def translate_asl():
-    """Endpoint for translating ASL images."""
-    if request.method == 'OPTIONS':
-        # Return a response for the preflight request
-        response = jsonify({'status': 'Preflight handled'})
-        response.headers.add("Access-Control-Allow-Origin", "https://salinterpret.vercel.app")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-        response.headers.add("Access-Control-Allow-Methods", "POST,OPTIONS")
-        return response
+    success, img = cap.read()
+    if not success:
+        return jsonify({'img': '', 'translation': ''})
 
-    try:
-        data = request.get_json()
-        if 'image' not in data:
-            return jsonify({'error': 'No image data received'}), 400
+    translation = translate_image(img)
 
-        img_data = base64.b64decode(data['image'])
-        img = cv2.imdecode(np.frombuffer(img_data, np.uint8), cv2.IMREAD_COLOR)
-        
-        if img is None:
-            return jsonify({'error': 'Invalid image'}), 400
+    _, buffer = cv2.imencode('.jpg', img)
+    img_str = base64.b64encode(buffer).decode('utf-8')
 
-        translation = translate_image(img)
-        response = jsonify({'translation': translation})
-        response.headers.add("Access-Control-Allow-Origin", "https://salinterpret.vercel.app")
-        return response
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'img': img_str, 'translation': translation})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(debug=True)
