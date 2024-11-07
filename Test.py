@@ -14,7 +14,7 @@ import os
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
 
 app = Flask(__name__)
-CORS(app, origins=["https://salinterpret.vercel.app"])  # Allow only requests from your Vercel frontend
+CORS(app, origins=["https://salinterpret-2373231f0ed4.herokuapp.com"])  # Allow only requests from your Vercel frontend
 
 # Define the path for the model and labels
 model_path = os.environ.get('MODEL_PATH', 'Model/keras_model.h5')  # Default to 'Model/keras_model.h5' if not set
