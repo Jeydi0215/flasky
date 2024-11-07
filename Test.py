@@ -1,4 +1,5 @@
-from flask import Flask, jsonify
+import requests
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import cv2
 from cvzone.HandTrackingModule import HandDetector
@@ -14,20 +15,18 @@ warnings.filterwarnings("ignore", category=UserWarning, message="No training con
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
-cap = cv2.VideoCapture(0)
-detector = HandDetector(maxHands=1)
 
-# Define the path for the model dynamically based on the environment
-# You can either use absolute paths or relative paths based on where your app is running
+# Define the path for the model and labels
 model_path = os.environ.get('MODEL_PATH', 'Model/keras_model.h5')  # Default to 'Model/keras_model.h5' if not set
 labels_path = os.environ.get('LABELS_PATH', 'Model/labels.txt')  # Default to 'Model/labels.txt' if not set
 
-# Use environment variables for Heroku or local paths
+# Initialize the classifier and hand detector
 classifier = Classifier(model_path, labels_path)
+detector = HandDetector(maxHands=1)
 
+# Constants
 offset = 20
 imgSize = 300
-
 labels = ["A", "B", "C", "D", "E", "F", "G", "H", "I/J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y/Z"]
 
 def translate_image(img):
@@ -66,18 +65,39 @@ def translate_image(img):
 
     return translation
 
-@app.route('/translate', methods=['GET'])
+@app.route('/translate', methods=['POST'])
 def translate_asl():
-    success, img = cap.read()
-    if not success:
-        return jsonify({'img': '', 'translation': ''})
+    file = request.files.get('image')
+    if not file:
+        return jsonify({'error': 'No image file provided'}), 400
 
+    # Convert the uploaded file to an image
+    file_bytes = np.frombuffer(file.read(), np.uint8)
+    img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+    # Get the translation
     translation = translate_image(img)
 
+    # Encode the image for the response
     _, buffer = cv2.imencode('.jpg', img)
     img_str = base64.b64encode(buffer).decode('utf-8')
+
+    # Send the translation and image data to Vercel frontend (Salinterpret)
+    vercel_url = 'https://salinterpret.vercel.app/Translation'  # Replace with your correct endpoint
+
+    payload = {
+        'image': img_str,
+        'translation': translation
+    }
+
+    try:
+        response = requests.post(vercel_url, json=payload)
+        response.raise_for_status()  # Raise an exception if the request failed
+        app.logger.info(f'Successfully sent data to Vercel, response: {response.status_code}')
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f'Error sending data to Vercel: {e}')
 
     return jsonify({'img': img_str, 'translation': translation})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
