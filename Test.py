@@ -14,7 +14,7 @@ import os
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app, origins=["https://salinterpret.vercel.app"])  # Allow only requests from your Vercel frontend
 
 # Define the path for the model and labels
 model_path = os.environ.get('MODEL_PATH', 'Model/keras_model.h5')  # Default to 'Model/keras_model.h5' if not set
@@ -65,8 +65,12 @@ def translate_image(img):
 
     return translation
 
-@app.route('/translate', methods=['POST'])
+@app.route('/translate', methods=['POST', 'OPTIONS'])
 def translate_asl():
+    # Handle preflight OPTIONS request
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'preflight successful'}), 200
+
     file = request.files.get('image')
     if not file:
         return jsonify({'error': 'No image file provided'}), 400
