@@ -1,3 +1,4 @@
+import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import cv2
@@ -81,7 +82,22 @@ def translate_asl():
     _, buffer = cv2.imencode('.jpg', img)
     img_str = base64.b64encode(buffer).decode('utf-8')
 
+    # Send the translation and image data to Vercel frontend (Salinterpret)
+    vercel_url = 'https://salinterpret.vercel.app/Translation'  # Replace with your correct endpoint
+
+    payload = {
+        'image': img_str,
+        'translation': translation
+    }
+
+    try:
+        response = requests.post(vercel_url, json=payload)
+        response.raise_for_status()  # Raise an exception if the request failed
+        app.logger.info(f'Successfully sent data to Vercel, response: {response.status_code}')
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f'Error sending data to Vercel: {e}')
+
     return jsonify({'img': img_str, 'translation': translation})
 
 if __name__ == '__main__':
-     app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
