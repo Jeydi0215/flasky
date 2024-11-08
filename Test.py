@@ -1,6 +1,6 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
-import cv2 
+import cv2
 from cvzone.HandTrackingModule import HandDetector
 from cvzone.ClassificationModule import Classifier
 import numpy as np
@@ -14,7 +14,6 @@ warnings.filterwarnings("ignore", category=UserWarning, message="No training con
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
-cap = cv2.VideoCapture(0)
 detector = HandDetector(maxHands=1)
 
 # Fetch model and labels path from environment variables (with default fallback)
@@ -34,49 +33,45 @@ def translate_image(img):
         hand = hands[0]
         x, y, w, h = hand['bbox']
 
-        imgWhite = np.ones((imgSize, imgSize, 3), np.uint8)*255
-        imgCrop = img[y - offset:y+h+offset, x-offset:x+w+offset]
+        imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
+        imgCrop = img[y - offset:y + h + offset, x - offset:x + w + offset]
 
-        imgCropShape = imgCrop.shape
-
-        aspectRatio = h/w
+        aspectRatio = h / w
 
         if aspectRatio > 1:
-            k = imgSize/h
-            wCal = math.ceil(k*w)
+            k = imgSize / h
+            wCal = math.ceil(k * w)
             imgResize = cv2.resize(imgCrop, (wCal, imgSize))
-            imgResizeShape = imgResize.shape
-            wGap = math.ceil((imgSize - wCal)/2)
-            imgWhite[:, wGap:wCal+wGap] = imgResize
-            prediction, index = classifier.getPrediction(imgWhite, draw=False)
-            print(prediction, index)
-
+            wGap = math.ceil((imgSize - wCal) / 2)
+            imgWhite[:, wGap:wCal + wGap] = imgResize
         else:
-            k = imgSize/w
-            hCal = math.ceil(k*h)
-            if imgCrop.size > 0:
-                imgResize = cv2.resize(imgCrop, (imgSize, hCal))
-            else:
-                return ''
-            imgResizeShape = imgResize.shape
-            hGap = math.ceil((imgSize - hCal) /2)
+            k = imgSize / w
+            hCal = math.ceil(k * h)
+            imgResize = cv2.resize(imgCrop, (imgSize, hCal))
+            hGap = math.ceil((imgSize - hCal) / 2)
             imgWhite[hGap:hCal + hGap, :] = imgResize
-            prediction, index = classifier.getPrediction(imgWhite, draw=False)
-            
+
+        prediction, index = classifier.getPrediction(imgWhite, draw=False)
         translation = labels[index]
     else:
         translation = ''
 
     return translation
 
-@app.route('/translate', methods=['GET'])
+@app.route('/translate', methods=['POST'])
 def translate_asl():
-    success, img = cap.read()
-    if not success:
-        return jsonify({'img': '', 'translation': ''})
+    if 'image' not in request.files:
+        return jsonify({'img': '', 'translation': ''}), 400
 
+    # Get image from request
+    image_file = request.files['image'].read()
+    np_img = np.frombuffer(image_file, np.uint8)
+    img = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
+
+    # Translate the image
     translation = translate_image(img)
 
+    # Encode image to base64
     _, buffer = cv2.imencode('.jpg', img)
     img_str = base64.b64encode(buffer).decode('utf-8')
 
