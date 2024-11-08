@@ -38,6 +38,11 @@ offset = 20
 imgSize = 300
 labels = ["A", "B", "C", "D", "E", "F", "G", "H", "I/J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y/Z"]
 
+# Default route for the root URL
+@app.route("/")
+def home():
+    return "Welcome to Flask!"
+
 # Translation function
 def translate_image(img):
     hands, img = detector.findHands(img)
