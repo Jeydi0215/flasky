@@ -92,3 +92,6 @@ def translate_asl():
 
     # Return JSON response directly to the frontend
     return jsonify({'img': img_str, 'translation': translation})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
