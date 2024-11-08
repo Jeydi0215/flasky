@@ -14,11 +14,11 @@ import os
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
 
 app = Flask(__name__)
-CORS(app, origins=["https://salinterpret-2373231f0ed4.herokuapp.com"])  # Allow only requests from your Vercel frontend
+CORS(app, origins=["https://salinterpret.vercel.app", "https://salinterpret-2373231f0ed4.herokuapp.com"])
 
 # Define the path for the model and labels
-model_path = os.environ.get('MODEL_PATH', 'Model/keras_model.h5')  # Default to 'Model/keras_model.h5' if not set
-labels_path = os.environ.get('LABELS_PATH', 'Model/labels.txt')  # Default to 'Model/labels.txt' if not set
+model_path = os.environ.get('MODEL_PATH', 'Model/keras_model.h5')
+labels_path = os.environ.get('LABELS_PATH', 'Model/labels.txt')
 
 # Initialize the classifier and hand detector
 classifier = Classifier(model_path, labels_path)
@@ -34,12 +34,10 @@ def translate_image(img):
     if hands:
         hand = hands[0]
         x, y, w, h = hand['bbox']
-
         imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
         imgCrop = img[y - offset:y + h + offset, x - offset:x + w + offset]
 
         aspectRatio = h / w
-
         if aspectRatio > 1:
             k = imgSize / h
             wCal = math.ceil(k * w)
@@ -47,7 +45,6 @@ def translate_image(img):
             wGap = math.ceil((imgSize - wCal) / 2)
             imgWhite[:, wGap:wCal + wGap] = imgResize
             prediction, index = classifier.getPrediction(imgWhite, draw=False)
-
         else:
             k = imgSize / w
             hCal = math.ceil(k * h)
@@ -62,14 +59,16 @@ def translate_image(img):
         translation = labels[index]
     else:
         translation = ''
-
     return translation
 
 @app.route('/translate', methods=['POST', 'OPTIONS'])
 def translate_asl():
-    # Handle preflight OPTIONS request
     if request.method == 'OPTIONS':
-        return jsonify({'status': 'preflight successful'}), 200
+        response = jsonify({'status': 'preflight successful'})
+        response.headers.add("Access-Control-Allow-Origin", "https://salinterpret-2373231f0ed4.herokuapp.com")
+        response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        return response, 200
 
     file = request.files.get('image')
     if not file:
@@ -87,8 +86,7 @@ def translate_asl():
     img_str = base64.b64encode(buffer).decode('utf-8')
 
     # Send the translation and image data to Vercel frontend (Salinterpret)
-    vercel_url = 'https://salinterpret.vercel.app/Translation'  # Replace with your correct endpoint
-
+    vercel_url = 'https://salinterpret.vercel.app/Translation'
     payload = {
         'image': img_str,
         'translation': translation
@@ -96,7 +94,7 @@ def translate_asl():
 
     try:
         response = requests.post(vercel_url, json=payload)
-        response.raise_for_status()  # Raise an exception if the request failed
+        response.raise_for_status()
         app.logger.info(f'Successfully sent data to Vercel, response: {response.status_code}')
     except requests.exceptions.RequestException as e:
         app.logger.error(f'Error sending data to Vercel: {e}')
