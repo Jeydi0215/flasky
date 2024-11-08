@@ -8,7 +8,7 @@ import math
 import base64
 import warnings
 import os
-import requests  # Import requests for the proxy functionality
+import requests
 
 # Suppress TensorFlow warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore", category=UserWarning, message="No training con
 app = Flask(__name__)
 
 # Enable CORS for specific origins
-CORS(app, origins=["https://salinterpret.vercel.app", "https://salinterpret-2373231f0ed4.herokuapp.com"])
+CORS(app, supports_credentials=True, origins=["https://salinterpret.vercel.app", "https://salinterpret-2373231f0ed4.herokuapp.com"])
 
 # Model and label paths
 model_path = os.environ.get('MODEL_PATH', 'Model/keras_model.h5')
@@ -67,8 +67,9 @@ def translate_image(img):
 @app.after_request
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = "https://salinterpret.vercel.app"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
 @app.route('/translate', methods=['POST', 'OPTIONS'])
@@ -93,24 +94,6 @@ def translate_asl():
 
     # Return JSON response directly to the frontend
     return jsonify({'img': img_str, 'translation': translation})
-
-# Proxy route to forward requests to an external API
-@app.route('/proxy', methods=['POST'])
-def proxy():
-    # Receive data from the frontend request
-    data = request.get_json()
-    
-    # Specify the external API URL you want to forward requests to
-    external_api_url = "https://externalapi.com/endpoint"
-    
-    # Forward the request to the external API
-    response = requests.post(external_api_url, json=data)
-    
-    # Return the response from the external API to the frontend
-    return (response.content, response.status_code, {
-        "Access-Control-Allow-Origin": "https://salinterpret.vercel.app",  # CORS header for frontend
-        "Content-Type": response.headers["Content-Type"]
-    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
