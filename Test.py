@@ -8,6 +8,7 @@ import math
 import base64
 import warnings
 import os
+import requests  # Import requests for the proxy functionality
 
 # Suppress TensorFlow warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
@@ -92,6 +93,24 @@ def translate_asl():
 
     # Return JSON response directly to the frontend
     return jsonify({'img': img_str, 'translation': translation})
+
+# Proxy route to forward requests to an external API
+@app.route('/proxy', methods=['POST'])
+def proxy():
+    # Receive data from the frontend request
+    data = request.get_json()
+    
+    # Specify the external API URL you want to forward requests to
+    external_api_url = "https://externalapi.com/endpoint"
+    
+    # Forward the request to the external API
+    response = requests.post(external_api_url, json=data)
+    
+    # Return the response from the external API to the frontend
+    return (response.content, response.status_code, {
+        "Access-Control-Allow-Origin": "https://salinterpret.vercel.app",  # CORS header for frontend
+        "Content-Type": response.headers["Content-Type"]
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
