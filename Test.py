@@ -1,4 +1,3 @@
-import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import cv2
@@ -14,9 +13,11 @@ import os
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
 
 app = Flask(__name__)
+
+# Enable CORS for specific origins
 CORS(app, origins=["https://salinterpret.vercel.app", "https://salinterpret-2373231f0ed4.herokuapp.com"])
 
-# Define the path for the model and labels
+# Model and label paths
 model_path = os.environ.get('MODEL_PATH', 'Model/keras_model.h5')
 labels_path = os.environ.get('LABELS_PATH', 'Model/labels.txt')
 
@@ -29,6 +30,7 @@ offset = 20
 imgSize = 300
 labels = ["A", "B", "C", "D", "E", "F", "G", "H", "I/J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y/Z"]
 
+# Translation function
 def translate_image(img):
     hands, img = detector.findHands(img)
     if hands:
@@ -61,14 +63,17 @@ def translate_image(img):
         translation = ''
     return translation
 
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "https://salinterpret.vercel.app"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    return response
+
 @app.route('/translate', methods=['POST', 'OPTIONS'])
 def translate_asl():
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'preflight successful'})
-        response.headers.add("Access-Control-Allow-Origin", "https://salinterpret-2373231f0ed4.herokuapp.com")
-        response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-        return response, 200
+        return jsonify({'status': 'preflight successful'}), 200
 
     file = request.files.get('image')
     if not file:
@@ -85,20 +90,7 @@ def translate_asl():
     _, buffer = cv2.imencode('.jpg', img)
     img_str = base64.b64encode(buffer).decode('utf-8')
 
-    # Send the translation and image data to Vercel frontend (Salinterpret)
-    vercel_url = 'https://salinterpret.vercel.app/Translation'
-    payload = {
-        'image': img_str,
-        'translation': translation
-    }
-
-    try:
-        response = requests.post(vercel_url, json=payload)
-        response.raise_for_status()
-        app.logger.info(f'Successfully sent data to Vercel, response: {response.status_code}')
-    except requests.exceptions.RequestException as e:
-        app.logger.error(f'Error sending data to Vercel: {e}')
-
+    # Return JSON response directly to the frontend
     return jsonify({'img': img_str, 'translation': translation})
 
 if __name__ == '__main__':
