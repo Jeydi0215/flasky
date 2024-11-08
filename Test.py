@@ -8,7 +8,10 @@ import math
 import base64
 import warnings
 import os
-import requests
+import logging
+
+# Setup basic logging
+logging.basicConfig(level=logging.INFO)
 
 # Suppress TensorFlow warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
@@ -23,8 +26,12 @@ model_path = os.environ.get('MODEL_PATH', 'Model/keras_model.h5')
 labels_path = os.environ.get('LABELS_PATH', 'Model/labels.txt')
 
 # Initialize the classifier and hand detector
-classifier = Classifier(model_path, labels_path)
-detector = HandDetector(maxHands=1)
+try:
+    classifier = Classifier(model_path, labels_path)
+    detector = HandDetector(maxHands=1)
+    logging.info("Classifier and HandDetector initialized successfully.")
+except Exception as e:
+    logging.error(f"Error initializing Classifier or HandDetector: {e}")
 
 # Constants
 offset = 20
