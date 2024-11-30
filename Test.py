@@ -1,106 +1,84 @@
 import os
-import tensorflow as tf
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import psutil  # For monitoring system resources
+import tensorflow as tf
 import logging
-import numpy as np
-from tensorflow.keras.preprocessing.image import img_to_array
 
-# Initialize Flask app
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://your-frontend.vercel.app"}})  # Update with your frontend URL
+CORS(app)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-app.logger.info("Starting Flask server...")
+logger = logging.getLogger(__name__)
 
-# Load model and labels
+# Load model and labels at startup
 MODEL_PATH = os.path.join(os.getcwd(), "Model", "keras_model.h5")
 LABELS_PATH = os.path.join(os.getcwd(), "Model", "labels.txt")
 
-try:
-    app.logger.info(f"Loading model from: {MODEL_PATH}")
-    model = tf.keras.models.load_model(MODEL_PATH)
-    app.logger.info(f"Model loaded successfully. Input shape: {model.input_shape}")
-except Exception as e:
-    app.logger.error(f"Failed to load model: {e}")
-    model = None
+# Global variables for the model and labels
+model = None
+labels = []
 
 try:
-    app.logger.info(f"Loading labels from: {LABELS_PATH}")
+    logger.info(f"Loading model from: {MODEL_PATH}")
+    model = tf.keras.models.load_model(MODEL_PATH)
+    logger.info("Model loaded successfully.")
+except Exception as e:
+    logger.error(f"Failed to load model: {e}")
+
+try:
+    logger.info(f"Loading labels from: {LABELS_PATH}")
     with open(LABELS_PATH, "r") as file:
         labels = file.read().splitlines()
-    app.logger.info(f"Labels loaded successfully: {labels}")
+    logger.info("Labels loaded successfully.")
 except Exception as e:
-    app.logger.error(f"Failed to load labels: {e}")
-    labels = []
+    logger.error(f"Failed to load labels: {e}")
 
-# Preprocessing function
-def preprocess_image(image_data):
-    try:
-        # Decode base64 image (assuming the data is sent in base64 format)
-        decoded_image = tf.io.decode_base64(image_data)
-        
-        # Convert to an image tensor
-        image = tf.image.decode_image(decoded_image, channels=3)
-        image = tf.image.resize(image, (224, 224))  # Replace with your model's input size
-        image_array = img_to_array(image) / 255.0  # Normalize pixel values
-        
-        # Expand dimensions for model input
-        return np.expand_dims(image_array, axis=0)
-    except Exception as e:
-        raise ValueError(f"Image preprocessing failed: {e}")
-
-# Routes
 @app.route('/')
 def home():
-    return "Flask server is running!"
+    return "Flask server is running!", 200
 
 @app.route('/translate', methods=['POST'])
 def translate():
-    app.logger.info("Received /translate request.")
-    
-    # Monitor resource usage
-    memory_usage = psutil.virtual_memory()
-    cpu_usage = psutil.cpu_percent(interval=1)
-    app.logger.info(f"Memory Usage: {memory_usage}")
-    app.logger.info(f"CPU Usage: {cpu_usage}%")
-
     try:
-        # Validate and log incoming request data
-        request_data = request.get_json()
-        app.logger.info(f"Request data: {request_data}")
+        logger.info("Received /translate request.")
+        
+        # Ensure 'image' is present in the request
+        if 'image' not in request.files:
+            logger.warning("No 'image' key in request.files.")
+            return jsonify({"error": "No image provided"}), 400
 
-        # Check for 'image' key in request
-        if 'image' not in request_data:
-            raise ValueError("Missing 'image' key in request payload.")
+        # Retrieve the uploaded file
+        file = request.files['image']
+        logger.info(f"Received file: {file.filename}")
 
-        # Preprocess image
-        image_data = request_data['image']
-        if not image_data or len(image_data) == 0:
-            raise ValueError("Image data is empty or invalid.")
-        processed_image = preprocess_image(image_data)
+        # Validate file type (you can customize this as needed)
+        if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            logger.warning("Unsupported file type.")
+            return jsonify({"error": "Unsupported file type"}), 400
 
-        # Predict using the preloaded model
-        app.logger.info("Making prediction...")
-        result = model.predict(processed_image)
-        label_index = result.argmax()
+        # Process the file (placeholder for actual preprocessing)
+        # Example: Convert the file to a tensor for prediction
+        import numpy as np
+        from PIL import Image
+
+        image = Image.open(file).resize((224, 224))  # Adjust size based on your model
+        image_array = np.array(image) / 255.0  # Normalize pixel values
+        image_tensor = np.expand_dims(image_array, axis=0)
+
+        # Make predictions
+        predictions = model.predict(image_tensor)
+        label_index = np.argmax(predictions)
         translation = labels[label_index]
 
-        # Log prediction result
-        app.logger.info(f"Prediction: {result}")
-        app.logger.info(f"Translated label: {translation}")
-        return jsonify({"translation": translation})
+        logger.info(f"Prediction: {predictions}")
+        logger.info(f"Translated label: {translation}")
 
-    except ValueError as ve:
-        app.logger.error(f"ValueError: {ve}")
-        return jsonify({"error": str(ve)}), 400
+        return jsonify({"translation": translation}), 200
 
     except Exception as e:
-        app.logger.error(f"Unhandled error: {e}")
-        return jsonify({"error": "Internal server error.", "details": str(e)}), 500
+        logger.error(f"Error in /translate: {e}")
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
-# Run the app in development mode
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
