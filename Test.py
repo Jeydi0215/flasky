@@ -47,35 +47,33 @@ def translate():
         if 'image' not in request.files:
             logger.warning("No 'image' key in request.files.")
             return jsonify({"error": "No image provided"}), 400
-
-        # Retrieve the uploaded file
+        
         file = request.files['image']
         logger.info(f"Received file: {file.filename}")
-
+        
         # Validate file type (you can customize this as needed)
         if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             logger.warning("Unsupported file type.")
             return jsonify({"error": "Unsupported file type"}), 400
-
+        
         # Process the file (placeholder for actual preprocessing)
-        # Example: Convert the file to a tensor for prediction
         import numpy as np
         from PIL import Image
-
         image = Image.open(file).resize((224, 224))  # Adjust size based on your model
         image_array = np.array(image) / 255.0  # Normalize pixel values
         image_tensor = np.expand_dims(image_array, axis=0)
-
+        
         # Make predictions
         predictions = model.predict(image_tensor)
         label_index = np.argmax(predictions)
         translation = labels[label_index]
-
+        
         logger.info(f"Prediction: {predictions}")
         logger.info(f"Translated label: {translation}")
-
+        
+        # Return the translation in the response
         return jsonify({"translation": translation}), 200
-
+    
     except Exception as e:
         logger.error(f"Error in /translate: {e}")
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
