@@ -1,13 +1,12 @@
 import os
-import pygame
 import threading
 import cv2
 import numpy as np
+import pygame
 from pygame.locals import QUIT
 from tensorflow.keras.models import load_model
-import tensorflow as tf
 
-# Define paths for the model and labels
+# Paths for the model and labels
 MODEL_PATH = os.path.join(os.getcwd(), "Model", "keras_model.h5")
 LABELS_PATH = os.path.join(os.getcwd(), "Model", "labels.txt")
 
@@ -23,12 +22,16 @@ black = (0, 0, 0)
 red = (255, 0, 0)
 
 # Webcam setup (using OpenCV)
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0)  # Default camera index
 
 # Load TensorFlow model and labels
-model = load_model(MODEL_PATH)
-with open(LABELS_PATH, "r") as f:
-    labels = f.read().splitlines()
+try:
+    model = load_model(MODEL_PATH)
+    with open(LABELS_PATH, "r") as f:
+        labels = f.read().splitlines()
+except Exception as e:
+    print(f"Error loading model or labels: {e}")
+    exit(1)
 
 # Variables
 translation = "Translation will appear here..."
@@ -58,7 +61,7 @@ def capture_and_translate():
         ret, frame = cap.read()
         if ret:
             # Start a thread to process the frame
-            threading.Thread(target=process_frame, args=(frame,)).start()
+            threading.Thread(target=process_frame, args=(frame,), daemon=True).start()
 
 # Main loop
 while running:
