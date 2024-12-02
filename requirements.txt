@@ -117,6 +117,7 @@ pyasn1_modules==0.4.0
 PyAutoGUI==0.9.54
 pycaw==20240210
 pycparser==2.21
+pygame==2.6.1
 PyGetWindow==0.0.9
 Pygments==2.16.1
 pymaze==1.2.3
