@@ -1,82 +1,98 @@
 import os
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+import pygame
+import threading
+import cv2
+import numpy as np
+from pygame.locals import QUIT
+from tensorflow.keras.models import load_model
 import tensorflow as tf
-import logging
 
-app = Flask(__name__)
-CORS(app)
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Load model and labels at startup
+# Define paths for the model and labels
 MODEL_PATH = os.path.join(os.getcwd(), "Model", "keras_model.h5")
 LABELS_PATH = os.path.join(os.getcwd(), "Model", "labels.txt")
 
-# Global variables for the model and labels
-model = None
-labels = []
+# Initialize Pygame
+pygame.init()
+screen = pygame.display.set_mode((800, 600))
+pygame.display.set_caption("ASL Translator")
 
-try:
-    logger.info(f"Loading model from: {MODEL_PATH}")
-    model = tf.keras.models.load_model(MODEL_PATH)
-    logger.info("Model loaded successfully.")
-except Exception as e:
-    logger.error(f"Failed to load model: {e}")
+# Fonts and Colors
+font = pygame.font.Font(None, 36)
+white = (255, 255, 255)
+black = (0, 0, 0)
+red = (255, 0, 0)
 
-try:
-    logger.info(f"Loading labels from: {LABELS_PATH}")
-    with open(LABELS_PATH, "r") as file:
-        labels = file.read().splitlines()
-    logger.info("Labels loaded successfully.")
-except Exception as e:
-    logger.error(f"Failed to load labels: {e}")
+# Webcam setup (using OpenCV)
+cap = cv2.VideoCapture(0)
 
-@app.route('/')
-def home():
-    return "Flask server is running!", 200
+# Load TensorFlow model and labels
+model = load_model(MODEL_PATH)
+with open(LABELS_PATH, "r") as f:
+    labels = f.read().splitlines()
 
-@app.route('/translate', methods=['POST'])
-def translate():
+# Variables
+translation = "Translation will appear here..."
+running = True
+is_translating = False
+
+# Function to process frame and predict translation
+def process_frame(frame):
+    global translation
     try:
-        logger.info("Received /translate request.")
-        
-        # Ensure 'image' is present in the request
-        if 'image' not in request.files:
-            logger.warning("No 'image' key in request.files.")
-            return jsonify({"error": "No image provided"}), 400
-        
-        file = request.files['image']
-        logger.info(f"Received file: {file.filename}")
-        
-        # Validate file type (you can customize this as needed)
-        if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-            logger.warning("Unsupported file type.")
-            return jsonify({"error": "Unsupported file type"}), 400
-        
-        # Process the file (placeholder for actual preprocessing)
-        import numpy as np
-        from PIL import Image
-        image = Image.open(file).resize((224, 224))  # Adjust size based on your model
-        image_array = np.array(image) / 255.0  # Normalize pixel values
-        image_tensor = np.expand_dims(image_array, axis=0)
-        
-        # Make predictions
-        predictions = model.predict(image_tensor)
-        label_index = np.argmax(predictions)
-        translation = labels[label_index]
-        
-        logger.info(f"Prediction: {predictions}")
-        logger.info(f"Translated label: {translation}")
-        
-        # Return the translation in the response
-        return jsonify({"translation": translation}), 200
-    
-    except Exception as e:
-        logger.error(f"Error in /translate: {e}")
-        return jsonify({"error": "Internal server error", "details": str(e)}), 500
+        # Preprocess frame for the model
+        frame_resized = cv2.resize(frame, (224, 224))
+        frame_normalized = frame_resized / 255.0
+        frame_expanded = np.expand_dims(frame_normalized, axis=0)
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+        # Model prediction
+        predictions = model.predict(frame_expanded)
+        predicted_label = labels[np.argmax(predictions)]
+        translation = predicted_label
+    except Exception as e:
+        translation = f"Error: {str(e)}"
+
+# Threaded translation to avoid blocking the UI
+def capture_and_translate():
+    global is_translating
+    while is_translating:
+        ret, frame = cap.read()
+        if ret:
+            # Start a thread to process the frame
+            threading.Thread(target=process_frame, args=(frame,)).start()
+
+# Main loop
+while running:
+    screen.fill(white)
+    
+    # Event Handling
+    for event in pygame.event.get():
+        if event.type == QUIT:
+            running = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:  # Toggle translation on SPACE key
+                is_translating = not is_translating
+                if is_translating:
+                    threading.Thread(target=capture_and_translate, daemon=True).start()
+
+    # Webcam Feed
+    ret, frame = cap.read()
+    if ret:
+        # Convert OpenCV frame (BGR) to Pygame surface (RGB)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = np.rot90(frame)
+        frame_surface = pygame.surfarray.make_surface(frame)
+        screen.blit(frame_surface, (50, 50))  # Position the video feed
+
+    # Display Translation
+    translation_text = font.render(f"Translation: {translation}", True, black)
+    screen.blit(translation_text, (50, 500))
+
+    # Instructions
+    instructions = font.render("Press SPACE to start/stop translating.", True, red)
+    screen.blit(instructions, (50, 550))
+
+    pygame.display.flip()
+
+# Cleanup
+cap.release()
+pygame.quit()
