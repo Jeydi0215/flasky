@@ -5,6 +5,8 @@ import tensorflow as tf
 import logging
 
 app = Flask(__name__)
+
+# Configure CORS to allow requests from specific origin
 CORS(app, resources={
     r"/translate": {
         "origins": ["https://salinterpret.vercel.app"],
@@ -78,11 +80,7 @@ def translate():
         logger.info(f"Translated label: {translation}")
         
         # Return the translation in the response
-        response = jsonify({"img": cameraImage, "translation": translation})
-        response.headers.add('Access-Control-Allow-Origin', 'https://salinterpret.vercel.app')
-        response.headers.add('Access-Control-Allow-Methods', 'POST')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return response, 200
+        return jsonify({"img": "cameraImage_placeholder", "translation": translation}), 200
     
     except Exception as e:
         logger.error(f"Error in /translate: {e}")
