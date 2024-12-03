@@ -5,7 +5,13 @@ import tensorflow as tf
 import logging
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={
+    r"/translate": {
+        "origins": ["https://salinterpret.vercel.app"],
+        "methods": ["POST"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -72,7 +78,11 @@ def translate():
         logger.info(f"Translated label: {translation}")
         
         # Return the translation in the response
-        return jsonify({"img": cameraImage, "translation": translation}), 200
+        response = jsonify({"img": cameraImage, "translation": translation})
+        response.headers.add('Access-Control-Allow-Origin', 'https://salinterpret.vercel.app')
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return response, 200
     
     except Exception as e:
         logger.error(f"Error in /translate: {e}")
