@@ -72,7 +72,7 @@ def translate():
         logger.info(f"Translated label: {translation}")
         
         # Return the translation in the response
-        return jsonify({"translation": translation}), 200
+        return jsonify({"img": cameraImage, "translation": translation}), 200
     
     except Exception as e:
         logger.error(f"Error in /translate: {e}")
