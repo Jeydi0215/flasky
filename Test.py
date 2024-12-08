@@ -1,110 +1,124 @@
-import os
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify
 from flask_cors import CORS
-import tensorflow as tf
-import logging
+import cv2
+from cvzone.HandTrackingModule import HandDetector
+from cvzone.ClassificationModule import Classifier
 import numpy as np
-from PIL import Image
-import io
+import math
 import base64
+import warnings
+import signal
+import sys
+import time
+
+# Suppress TensorFlow warning
+warnings.filterwarnings("ignore", category=UserWarning, message="No training configuration found in the save file")
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
-# Configure CORS
-CORS(app, resources={
-    r"/translate": {
-        "origins": [
-            "https://salinterpret.vercel.app",  # React frontend
-            "https://middleman-psi-five.vercel.app"  # Middleman server
-        ],
-        "methods": ["POST"],
-        "allow_headers": ["Content-Type"]
-    }
-})
+# Initialize video capture
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("Error: Could not open video.")
+    exit()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Signal handler to release video capture
+def signal_handler(sig, frame):
+    cap.release()  # Release the video capture
+    sys.exit(0)    # Exit the program
 
-# Paths to model and labels
-MODEL_PATH = os.path.join(os.getcwd(), "Model", "keras_model.h5")
-LABELS_PATH = os.path.join(os.getcwd(), "Model", "labels.txt")
+signal.signal(signal.SIGINT, signal_handler)
 
-# Global variables for model and labels
-model = None
-labels = []
+# Initialize hand detector and classifier
+detector = HandDetector(maxHands=1)
+classifier = Classifier(
+    r"C:\Users\PC\OneDrive\Desktop\asl\flask-server\venv\Model\keras_model.h5", 
+    r"C:\Users\PC\OneDrive\Desktop\asl\flask-server\venv\Model\labels.txt"
+)
 
-# Load model and labels at startup
-try:
-    logger.info(f"Loading model from: {MODEL_PATH}")
-    model = tf.keras.models.load_model(MODEL_PATH)
-    logger.info("Model loaded successfully.")
-except Exception as e:
-    logger.error(f"Failed to load model: {e}")
+offset = 20
+imgSize = 300
+labels = [
+    "A", "B", "C", "D", "E", "F", "G", "H", "I/J", "K", 
+    "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", 
+    "V", "W", "X", "Y/Z"
+]
 
-try:
-    logger.info(f"Loading labels from: {LABELS_PATH}")
-    with open(LABELS_PATH, "r") as file:
-        labels = file.read().splitlines()
-    logger.info("Labels loaded successfully.")
-except Exception as e:
-    logger.error(f"Failed to load labels: {e}")
+# Initialize variables for timing and hand detection
+last_translation_time = 0
+last_detected_hand = None
 
+def translate_image_with_label(img):
+    hands, img = detector.findHands(img)
+    if hands:
+        hand = hands[0]
+        x, y, w, h = hand['bbox']
 
-@app.route('/')
-def home():
-    """Home route to check server status."""
-    return "Flask server is running!", 200
+        imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
+        imgCrop = img[y - offset:y + h + offset, x - offset:x + w + offset]
 
+        aspectRatio = h / w
 
-@app.route('/translate', methods=['POST'])
-def translate():
-    """
-    Endpoint to handle image translation requests.
-    Expects an image file in the request and returns the translation.
-    """
-    try:
-        logger.info("Received /translate request.")
+        if aspectRatio > 1:
+            k = imgSize / h
+            wCal = math.ceil(k * w)
+            imgResize = cv2.resize(imgCrop, (wCal, imgSize))
+            wGap = math.ceil((imgSize - wCal) / 2)
+            imgWhite[:, wGap:wCal + wGap] = imgResize
+            prediction, index = classifier.getPrediction(imgWhite, draw=False)
+        else:
+            k = imgSize / w
+            hCal = math.ceil(k * h)
+            imgResize = cv2.resize(imgCrop, (imgSize, hCal))
+            hGap = math.ceil((imgSize - hCal) / 2)
+            imgWhite[hGap:hCal + hGap, :] = imgResize
+            prediction, index = classifier.getPrediction(imgWhite, draw=False)
 
-        # Check if an image is present in the request
-        if 'image' not in request.files:
-            logger.warning("No 'image' key in request.files.")
-            return jsonify({"error": "No image provided"}), 400
+        # Debug: Print the prediction result and index
+        print("Prediction: ", prediction)
+        print("Index: ", index)
+        print("Label: ", labels[index])
 
-        file = request.files['image']
-        logger.info(f"Received file: {file.filename}")
+        # Draw label on bounding box
+        label = labels[index]
+        cv2.putText(img, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)  # Green text above the box
+        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green bounding box
+        
+        return label, img
+    return '', img
 
-        # Validate file type
-        if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-            logger.warning("Unsupported file type.")
-            return jsonify({"error": "Unsupported file type"}), 400
+@app.route('/translate', methods=['GET'])
+def translate_asl():
+    global last_translation_time, last_detected_hand
 
-        # Process the image
-        image = Image.open(file).resize((224, 224))  # Resize based on model input
-        image_array = np.array(image) / 255.0  # Normalize pixel values
-        image_tensor = np.expand_dims(image_array, axis=0)  # Add batch dimension
+    current_time = time.time()
+    success, img = cap.read()
+    if not success:
+        return jsonify({'img': '', 'translation': ''})
 
-        # Make predictions
-        predictions = model.predict(image_tensor)
-        label_index = np.argmax(predictions)
-        translation = labels[label_index]
+    hands, _ = detector.findHands(img)
+    if hands:
+        # Check if 5 seconds have passed since the last translation
+        if current_time - last_translation_time >= 5:
+            hand_data = hands[0]['bbox']  # Current hand bounding box
+            if hand_data != last_detected_hand:  # Only translate if the hand is new
+                translation, img = translate_image_with_label(img)
+                if translation:
+                    last_detected_hand = hand_data  # Update last detected hand
+                    last_translation_time = current_time  # Update the last translation time
+            else:
+                translation = ''  # Ignore repeated hand
+        else:
+            translation = ''  # Ignore until 5 seconds pass
+    else:
+        translation = ''  # No hand detected
 
-        logger.info(f"Predictions: {predictions}")
-        logger.info(f"Translated label: {translation}")
+    # Encode the frame for display
+    _, buffer = cv2.imencode('.jpg', img)
+    img_str = base64.b64encode(buffer).decode('utf-8')
 
-        # Convert the processed image to Base64 for frontend display (optional)
-        buffered = io.BytesIO()
-        image.save(buffered, format="JPEG")
-        image_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
-
-        # Return the response
-        return jsonify({"img": image_base64, "translation": translation}), 200
-
-    except Exception as e:
-        logger.error(f"Error in /translate: {e}")
-        return jsonify({"error": "Internal server error", "details": str(e)}), 500
-
+    return jsonify({'img': img_str, 'translation': translation})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(debug=True)
