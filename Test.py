@@ -7,8 +7,6 @@ import numpy as np
 import math
 import base64
 import warnings
-import signal
-import sys
 import time
 
 # Suppress TensorFlow warning
@@ -17,18 +15,11 @@ warnings.filterwarnings("ignore", category=UserWarning, message="No training con
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
-# Initialize video capture
-cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    print("Error: Could not open video.")
-    exit()
-
-# Signal handler to release video capture
-def signal_handler(sig, frame):
-    cap.release()  # Release the video capture
-    sys.exit(0)    # Exit the program
-
-signal.signal(signal.SIGINT, signal_handler)
+# Remove video capture initialization since the camera is not used
+# cap = cv2.VideoCapture(0)
+# if not cap.isOpened():
+#     print("Error: Could not open video.")
+#     exit()
 
 # Initialize hand detector and classifier
 detector = HandDetector(maxHands=1)
@@ -93,9 +84,9 @@ def translate_asl():
     global last_translation_time, last_detected_hand
 
     current_time = time.time()
-    success, img = cap.read()
-    if not success:
-        return jsonify({'img': '', 'translation': ''})
+
+    # Since the camera is not being used, we will return a static image (you can replace with your own static image)
+    img = cv2.imread("path_to_default_image.jpg")  # Provide a static image if no camera feed
 
     hands, _ = detector.findHands(img)
     if hands:
