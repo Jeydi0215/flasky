@@ -19,7 +19,10 @@ warnings.filterwarnings("ignore", category=UserWarning, message="No training con
 app = Flask(__name__)
 
 # Enable CORS for specific origins
-CORS(app, supports_credentials=True, origins=["https://salinterpret.vercel.app", "https://salinterpret-2373231f0ed4.herokuapp.com"])
+CORS(app, supports_credentials=True, origins=[
+    "https://salinterpret.vercel.app",
+    "https://salinterpret-2373231f0ed4.herokuapp.com"
+])
 
 # Model and label paths
 model_path = os.environ.get('MODEL_PATH', 'Model/keras_model.h5')
@@ -32,6 +35,7 @@ try:
     logging.info("Classifier and HandDetector initialized successfully.")
 except Exception as e:
     logging.error(f"Error initializing Classifier or HandDetector: {e}")
+    exit(1)  # Exit the application if initialization fails
 
 # Constants
 offset = 20
@@ -49,32 +53,37 @@ def translate_image(img):
     if hands:
         hand = hands[0]
         x, y, w, h = hand['bbox']
+
+        # Ensure cropping is within bounds
+        h_img, w_img, _ = img.shape
+        x1, y1 = max(0, x - offset), max(0, y - offset)
+        x2, y2 = min(w_img, x + w + offset), min(h_img, y + h + offset)
+        imgCrop = img[y1:y2, x1:x2]
+
+        # Prepare white image and resize cropped hand
         imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
-        imgCrop = img[y - offset:y + h + offset, x - offset:x + w + offset]
-
         aspectRatio = h / w
-        if aspectRatio > 1:
-            k = imgSize / h
-            wCal = math.ceil(k * w)
-            imgResize = cv2.resize(imgCrop, (wCal, imgSize))
-            wGap = math.ceil((imgSize - wCal) / 2)
-            imgWhite[:, wGap:wCal + wGap] = imgResize
-            prediction, index = classifier.getPrediction(imgWhite, draw=False)
-        else:
-            k = imgSize / w
-            hCal = math.ceil(k * h)
-            if imgCrop.size > 0:
-                imgResize = cv2.resize(imgCrop, (imgSize, hCal))
+        try:
+            if aspectRatio > 1:
+                k = imgSize / h
+                wCal = math.ceil(k * w)
+                imgResize = cv2.resize(imgCrop, (wCal, imgSize))
+                wGap = math.ceil((imgSize - wCal) / 2)
+                imgWhite[:, wGap:wCal + wGap] = imgResize
             else:
-                return ''
-            hGap = math.ceil((imgSize - hCal) / 2)
-            imgWhite[hGap:hCal + hGap, :] = imgResize
-            prediction, index = classifier.getPrediction(imgWhite, draw=False)
+                k = imgSize / w
+                hCal = math.ceil(k * h)
+                imgResize = cv2.resize(imgCrop, (imgSize, hCal))
+                hGap = math.ceil((imgSize - hCal) / 2)
+                imgWhite[hGap:hCal + hGap, :] = imgResize
 
-        translation = labels[index]
+            prediction, index = classifier.getPrediction(imgWhite, draw=False)
+            return labels[index]
+        except Exception as e:
+            logging.error(f"Error during translation: {e}")
+            return ''
     else:
-        translation = ''
-    return translation
+        return ''
 
 @app.after_request
 def add_cors_headers(response):
@@ -89,23 +98,33 @@ def translate_asl():
     if request.method == 'OPTIONS':
         return jsonify({'status': 'preflight successful'}), 200
 
-    file = request.files.get('image')
-    if not file:
-        return jsonify({'error': 'No image file provided'}), 400
+    try:
+        # Validate file existence
+        file = request.files.get('image')
+        if not file:
+            return jsonify({'error': 'No image file provided'}), 400
 
-    # Convert the uploaded file to an image
-    file_bytes = np.frombuffer(file.read(), np.uint8)
-    img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        # Convert the uploaded file to an image
+        file_bytes = np.frombuffer(file.read(), np.uint8)
+        img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    # Get the translation
-    translation = translate_image(img)
+        # Get the translation
+        translation = translate_image(img)
 
-    # Encode the image for the response
-    _, buffer = cv2.imencode('.jpg', img)
-    img_str = base64.b64encode(buffer).decode('utf-8')
+        # Encode the image for the response
+        _, buffer = cv2.imencode('.jpg', img)
+        img_str = base64.b64encode(buffer).decode('utf-8')
 
-    # Return JSON response directly to the frontend
-    return jsonify({'img': img_str, 'translation': translation})
+        # Return the response
+        return jsonify({'img': img_str, 'translation': translation}), 200
+
+    except Exception as e:
+        logging.error(f"Translation error: {e}")
+        return jsonify({'error': f"Server error: {e}"}), 500
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'running'}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
