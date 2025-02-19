@@ -17,9 +17,8 @@ app = Flask(__name__)
 # Enable CORS for specific origin
 CORS(app, resources={r"/*": {"origins": "https://salinterpret.vercel.app"}})
 
-# Paths to model and labels
-base_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(base_dir, 'Model', 'keras_model.h5')
+# Path to model
+model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'salinterpret.h5')
 
 if not os.path.exists(model_path):
     raise FileNotFoundError(f"Model file not found at: {model_path}")
@@ -27,12 +26,6 @@ if not os.path.exists(model_path):
 # Load the model and initialize hand detector
 classifier = load_model(model_path, compile=False)
 detector = HandDetector(maxHands=1)
-
-labels = [
-    "A", "B", "C", "D", "E", "F", "G", "H", "I/J", "K",
-    "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U",
-    "V", "W", "X", "Y/Z"
-]
 
 def translate_image(img):
     """Processes the input image and predicts the corresponding ASL letter."""
@@ -61,7 +54,7 @@ def translate_image(img):
 
         prediction = classifier.predict(np.expand_dims(imgWhite, axis=0))
         index = np.argmax(prediction)
-        translation = labels[index]
+        translation = str(index)  # Assuming the model's output corresponds to index-based labels
     else:
         translation = ''
     return translation
